@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Medical Image Enhancement & Tumor Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Load Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <header>
+        <h1>NeuroScan AI</h1>
+        <p class="subtitle">Advanced Medical Image Enhancement and Brain Tumor Detection System</p>
+    </header>
+
+    <main>
+        <!-- Status Indicator -->
+        <div class="model-status">
+            <div class="status-dot {{ 'loaded' if 'Loaded' in model_status else 'not-found' }}"></div>
+            <span>Model: {{ model_status }}</span>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <p><i class="fas fa-exclamation-circle"></i> {{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% if not results %}
+        <!-- Upload Section -->
+        <section class="glass-panel upload-section">
+            <h2>Analyze MRI Scan</h2>
+            <p class="subtitle" style="margin-bottom: 2rem;">Upload a brain MRI scan (JPG/PNG) to begin the processing pipeline.</p>
+            
+            <form action="{{ url_for('predict') }}" method="post" enctype="multipart/form-data" id="upload-form">
+                <div class="file-drop-area" id="drop-area">
+                    <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                    <h3>Drag & Drop your image here</h3>
+                    <p style="color: var(--text-muted); margin-top: 0.5rem;">or click to browse</p>
+                    <input type="file" name="file" class="file-input" id="file-input" accept="image/*" required>
+                </div>
+                
+                <div id="file-name-display" style="margin-top: 1rem; color: var(--accent-green); font-weight: 500; display: none;"></div>
+                
+                <button type="submit" class="btn" id="submit-btn" style="width: 100%; margin-top: 2rem;" disabled>
+                    <i class="fas fa-brain"></i> Start Analysis
+                </button>
+            </form>
+        </section>
+        {% endif %}
+
+        {% if results %}
+        <!-- Results Section -->
+        <section class="results-container">
+            
+            <!-- Final Prediction -->
+            <div class="glass-panel prediction-box {{ 'tumor' if 'Tumor Detected' in results.prediction else 'normal' }}">
+                <h2 id="prediction-result">{{ results.prediction }}</h2>
+                <p class="confidence">Confidence Score: {{ results.confidence }}%</p>
+                <a href="{{ url_for('index') }}" class="btn" style="display: inline-block; margin-top: 1rem;">
+                    <i class="fas fa-redo"></i> Analyze Another Image
+                </a>
+            </div>
+
+            <!-- Image Processing Pipeline -->
+            <div class="glass-panel">
+                <div class="result-header">
+                    <h2>Image Processing Pipeline</h2>
+                    <p class="subtitle">Step-by-step digital enhancement and segmentation</p>
+                </div>
+                
+                <div class="pipeline-grid">
+                    <div class="pipeline-step">
+                        <img src="/{{ results.original }}" alt="Original Image">
+                        <h3>1. Original</h3>
+                        <p>Grayscale & Resized</p>
+                    </div>
+                    
+                    <div class="pipeline-step">
+                        <img src="/{{ results.enhanced }}" alt="Enhanced Image">
+                        <h3>2. Enhanced</h3>
+                        <p>Histogram Eq. + Contrast Stretch</p>
+                    </div>
+                    
+                    <div class="pipeline-step">
+                        <img src="/{{ results.noise_removed }}" alt="Noise Removed">
+                        <h3>3. Noise Removal</h3>
+                        <p>Median + Gaussian Blur</p>
+                    </div>
+                    
+                    <div class="pipeline-step">
+                        <img src="/{{ results.sharpened }}" alt="Sharpened Image">
+                        <h3>4. Sharpened</h3>
+                        <p>Unsharp Masking</p>
+                    </div>
+                    
+                    <div class="pipeline-step">
+                        <img src="/{{ results.segmented }}" alt="Segmented Mask">
+                        <h3>5. Segmented</h3>
+                        <p>Otsu Threshold + Canny Edge</p>
+                    </div>
+
+                    <div class="pipeline-step">
+                        <img src="/{{ results.highlighted }}" alt="Highlighted ROI">
+                        <h3>6. ROI Highlight</h3>
+                        <p>Bounding Box on Original</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                <!-- Histograms -->
+                <div class="glass-panel" style="flex: 1; min-width: 300px;">
+                    <h3>Intensity Analysis</h3>
+                    <div class="histograms">
+                        <div>
+                            <img src="/{{ results.original_hist }}" alt="Original Histogram" style="width: 100%; border-radius: 8px;">
+                        </div>
+                        <div>
+                            <img src="/{{ results.enhanced_hist }}" alt="Enhanced Histogram" style="width: 100%; border-radius: 8px;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extracted Features -->
+                <div class="glass-panel" style="flex: 1; min-width: 300px;">
+                    <h3>Extracted Features</h3>
+                    <p class="subtitle">Data fed to the Machine Learning model</p>
+                    <table class="features-table">
+                        <tbody>
+                            <tr>
+                                <th>Tumor Area (px)</th>
+                                <td>{{ results.features.area }}</td>
+                            </tr>
+                            <tr>
+                                <th>Mean Intensity</th>
+                                <td>{{ "%.2f"|format(results.features.mean_intensity) }}</td>
+                            </tr>
+                            <tr>
+                                <th>Std Deviation</th>
+                                <td>{{ "%.2f"|format(results.features.std_intensity) }}</td>
+                            </tr>
+                            <tr>
+                                <th>Texture Contrast</th>
+                                <td>{{ "%.2f"|format(results.features.contrast) }}</td>
+                            </tr>
+                            <tr>
+                                <th>Texture Homogeneity</th>
+                                <td>{{ "%.2f"|format(results.features.homogeneity) }}</td>
+                            </tr>
+                            <tr>
+                                <th>Texture Energy</th>
+                                <td>{{ "%.2f"|format(results.features.energy) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+        {% endif %}
+    </main>
+
+    <script>
+        // Simple script for drag and drop functionality
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const submitBtn = document.getElementById('submit-btn');
+
+        if(dropArea) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+
+            function highlight(e) {
+                dropArea.style.borderColor = 'var(--primary)';
+                dropArea.style.background = 'rgba(79, 70, 229, 0.05)';
+            }
+
+            function unhighlight(e) {
+                dropArea.style.borderColor = 'var(--border-color)';
+                dropArea.style.background = 'rgba(255, 255, 255, 0.02)';
+            }
+
+            dropArea.addEventListener('drop', handleDrop, false);
+
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                fileInput.files = files;
+                updateFileInfo();
+            }
+
+            dropArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', updateFileInfo);
+
+            function updateFileInfo() {
+                if(fileInput.files.length > 0) {
+                    fileNameDisplay.innerHTML = `<i class="fas fa-file-image"></i> ${fileInput.files[0].name}`;
+                    fileNameDisplay.style.display = 'block';
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-cogs"></i> Run Analysis';
+                }
+            }
+            
+            // Show loading state on submit
+            const form = document.getElementById('upload-form');
+            form.addEventListener('submit', function() {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing Image...';
+            });
+        }
+    </script>
+</body>
+</html>
